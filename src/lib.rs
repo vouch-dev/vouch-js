@@ -66,8 +66,14 @@ impl vouch_lib::extension::Extension for JsExtension {
     fn registries_package_metadata(
         &self,
         package_name: &str,
-        package_version: &str,
+        package_version: &Option<&str>,
     ) -> Result<Vec<vouch_lib::extension::RegistryPackageMetadata>> {
+        let package_version = match package_version {
+            Some(v) => Some(v.to_string()),
+            None => get_latest_version(&package_name)?,
+        }
+        .ok_or(format_err!("Failed to find package version."))?;
+
         // Query remote package registry for given package.
         let human_url = get_registry_human_url(&self, &package_name, &package_version)?;
 
@@ -88,8 +94,19 @@ impl vouch_lib::extension::Extension for JsExtension {
             human_url: human_url.to_string(),
             artifact_url: artifact_url.to_string(),
             is_primary: true,
+            package_version: package_version,
         }])
     }
+}
+
+/// Given package name, return latest version.
+fn get_latest_version(package_name: &str) -> Result<Option<String>> {
+    let json = get_registry_entry_json(&package_name)?;
+    let versions = json["versions"]
+        .as_object()
+        .ok_or(format_err!("Failed to find versions JSON section."))?;
+    let latest_version = versions.keys().last();
+    Ok(latest_version.cloned())
 }
 
 fn get_registry_human_url(
