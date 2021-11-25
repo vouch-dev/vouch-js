@@ -33,11 +33,11 @@ impl vouch_lib::extension::Extension for JsExtension {
         self.registry_host_names_.clone()
     }
 
-    fn identify_local_dependencies(
+    fn identify_file_defined_dependencies(
         &self,
         working_directory: &std::path::PathBuf,
         extension_args: &Vec<String>,
-    ) -> Result<Vec<vouch_lib::extension::DependenciesSpec>> {
+    ) -> Result<Vec<vouch_lib::extension::FileDefinedDependencies>> {
         let include_dev_dependencies = extension_args.iter().any(|v| v == "--dev");
 
         // Identify all dependency definition files.
@@ -56,7 +56,7 @@ impl vouch_lib::extension::Extension for JsExtension {
                     npm::get_registry_host_name(),
                 ),
             };
-            all_dependency_specs.push(vouch_lib::extension::DependenciesSpec {
+            all_dependency_specs.push(vouch_lib::extension::FileDefinedDependencies {
                 path: dependency_file.path,
                 registry_host_name: registry_host_name,
                 dependencies: dependencies,
