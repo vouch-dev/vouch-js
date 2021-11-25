@@ -19,6 +19,7 @@ type JsonObject = serde_json::Map<String, serde_json::Value>;
 
 fn parse_dependencies(
     package_entry: &serde_json::Value,
+    include_dev_dependencies: bool,
 ) -> Result<Vec<vouch_lib::extension::Dependency>> {
     let mut unprocessed_dependencies_sections: std::collections::VecDeque<&JsonObject> =
         std::collections::VecDeque::new();
@@ -30,6 +31,10 @@ fn parse_dependencies(
     let mut all_dependencies = HashSet::new();
     while let Some(dependencies) = unprocessed_dependencies_sections.pop_front() {
         for (package_name, entry) in dependencies {
+            if !include_dev_dependencies && entry["dev"].as_bool().unwrap_or_default() {
+                continue;
+            }
+
             let version_parse_result = get_parsed_version(&entry["version"].as_str());
             all_dependencies.insert(vouch_lib::extension::Dependency {
                 name: package_name.clone(),
@@ -50,6 +55,7 @@ fn parse_dependencies(
 /// Parse dependencies from project dependencies definition file.
 pub fn get_dependencies(
     file_path: &std::path::PathBuf,
+    include_dev_dependencies: bool,
 ) -> Result<Vec<vouch_lib::extension::Dependency>> {
     let file = std::fs::File::open(file_path)?;
     let reader = std::io::BufReader::new(file);
@@ -58,7 +64,7 @@ pub fn get_dependencies(
         file_path.display()
     ))?;
 
-    let all_dependencies = parse_dependencies(&package_entry)?;
+    let all_dependencies = parse_dependencies(&package_entry, include_dev_dependencies)?;
     Ok(all_dependencies)
 }
 

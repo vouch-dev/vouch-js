@@ -36,8 +36,10 @@ impl vouch_lib::extension::Extension for JsExtension {
     fn identify_local_dependencies(
         &self,
         working_directory: &std::path::PathBuf,
-        _extension_args: &Vec<String>,
+        extension_args: &Vec<String>,
     ) -> Result<Vec<vouch_lib::extension::DependenciesSpec>> {
+        let include_dev_dependencies = extension_args.iter().any(|v| v == "--dev");
+
         // Identify all dependency definition files.
         let dependency_files = match identify_dependency_files(&working_directory) {
             Some(v) => v,
@@ -50,7 +52,7 @@ impl vouch_lib::extension::Extension for JsExtension {
             // TODO: Add support for parsing all definition file types.
             let (dependencies, registry_host_name) = match dependency_file.r#type {
                 DependencyFileType::Npm => (
-                    npm::get_dependencies(&dependency_file.path)?,
+                    npm::get_dependencies(&dependency_file.path, include_dev_dependencies)?,
                     npm::get_registry_host_name(),
                 ),
             };
