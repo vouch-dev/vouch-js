@@ -1,4 +1,4 @@
-use anyhow::{format_err, Context, Result};
+use anyhow::{Context, Result};
 use std::collections::HashSet;
 
 static HOST_NAME: &str = "npmjs.com";
@@ -15,43 +15,50 @@ fn get_parsed_version(version: &Option<&str>) -> vouch_lib::extension::common::V
     Err(vouch_lib::extension::common::VersionError::from_missing_version())
 }
 
-fn parse_section(
-    json_section: &serde_json::map::Map<std::string::String, serde_json::value::Value>,
-) -> Result<HashSet<vouch_lib::extension::Dependency>> {
-    let mut dependencies = HashSet::new();
-    for (package_name, entry) in json_section {
-        let version_parse_result = get_parsed_version(&entry["version"].as_str());
+type JsonObject = serde_json::Map<String, serde_json::Value>;
 
-        dependencies.insert(vouch_lib::extension::Dependency {
-            name: package_name.clone(),
-            version: version_parse_result,
-        });
+fn parse_dependencies(
+    package_entry: &serde_json::Value,
+) -> Result<Vec<vouch_lib::extension::Dependency>> {
+    let mut unprocessed_dependencies_sections: std::collections::VecDeque<&JsonObject> =
+        std::collections::VecDeque::new();
+
+    if let Some(dependencies) = package_entry["dependencies"].as_object() {
+        unprocessed_dependencies_sections.push_back(dependencies);
     }
-    Ok(dependencies)
+
+    let mut all_dependencies = HashSet::new();
+    while let Some(dependencies) = unprocessed_dependencies_sections.pop_front() {
+        for (package_name, entry) in dependencies {
+            let version_parse_result = get_parsed_version(&entry["version"].as_str());
+            all_dependencies.insert(vouch_lib::extension::Dependency {
+                name: package_name.clone(),
+                version: version_parse_result,
+            });
+
+            if let Some(sub_dependencies) = entry["dependencies"].as_object() {
+                unprocessed_dependencies_sections.push_back(sub_dependencies);
+            }
+        }
+    }
+
+    let mut all_dependencies: Vec<_> = all_dependencies.into_iter().collect();
+    all_dependencies.sort();
+    Ok(all_dependencies)
 }
 
 /// Parse dependencies from project dependencies definition file.
 pub fn get_dependencies(
     file_path: &std::path::PathBuf,
-) -> Result<HashSet<vouch_lib::extension::Dependency>> {
+) -> Result<Vec<vouch_lib::extension::Dependency>> {
     let file = std::fs::File::open(file_path)?;
     let reader = std::io::BufReader::new(file);
-    let package_json_file: serde_json::Value = serde_json::from_reader(reader).context(format!(
+    let package_entry: serde_json::Value = serde_json::from_reader(reader).context(format!(
         "Failed to parse package-lock.json: {}",
         file_path.display()
     ))?;
 
-    let mut all_dependencies: HashSet<vouch_lib::extension::Dependency> = HashSet::new();
-    for section in vec!["dependencies"] {
-        let json_section = package_json_file[section].as_object().ok_or(format_err!(
-            "Failed to parse '{}' section of package-lock.json file",
-            section
-        ))?;
-        let dependencies = parse_section(&json_section)?;
-        for dependency in dependencies {
-            all_dependencies.insert(dependency);
-        }
-    }
+    let all_dependencies = parse_dependencies(&package_entry)?;
     Ok(all_dependencies)
 }
 

@@ -57,7 +57,7 @@ impl vouch_lib::extension::Extension for JsExtension {
             all_dependency_specs.push(vouch_lib::extension::DependenciesSpec {
                 path: dependency_file.path,
                 registry_host_name: registry_host_name,
-                dependencies: dependencies.into_iter().collect(),
+                dependencies: dependencies,
             });
         }
 
