@@ -33,6 +33,70 @@ impl vouch_lib::extension::Extension for JsExtension {
         self.registry_host_names_.clone()
     }
 
+    /// Returns a list of dependencies for the given package.
+    ///
+    /// Returns one package dependencies structure per registry.
+    fn identify_package_dependencies(
+        &self,
+        package_name: &str,
+        package_version: &Option<&str>,
+        _extension_args: &Vec<String>,
+    ) -> Result<Vec<vouch_lib::extension::PackageDependencies>> {
+        // npm install is-even@1.0.0 --package-lock-only
+        let tmp_dir = tempdir::TempDir::new("vouch_js_identify_package_dependencies")?;
+        let tmp_directory_path = tmp_dir.path().to_path_buf();
+
+        let package = if let Some(package_version) = package_version {
+            format!(
+                "{name}@{version}",
+                name = package_name,
+                version = package_version
+            )
+        } else {
+            package_name.to_string()
+        };
+        let args = vec!["install", package.as_str(), "--package-lock-only"];
+
+        std::process::Command::new("npm")
+            .args(args)
+            .stdin(std::process::Stdio::null())
+            .stderr(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .current_dir(&tmp_directory_path)
+            .output()?;
+
+        let package_lock_path = tmp_directory_path.join("package-lock.json");
+        let dependencies = npm::get_dependencies(&package_lock_path, false)?;
+
+        let package_version = if let Some(package_version) = package_version {
+            vouch_lib::extension::VersionParseResult::Ok(package_version.to_string())
+        } else {
+            // Extract target package version from dependencies so as to remove from the dependencies vector.
+            let mut target_package_instances: Vec<_> = dependencies
+                .iter()
+                .filter(|d| d.name == package_name)
+                .cloned()
+                .collect();
+            target_package_instances.sort();
+            target_package_instances.reverse();
+            let target_package_instance = target_package_instances.first().ok_or(format_err!(
+                "Failed to find target package in dependencies list."
+            ))?;
+            target_package_instance.version.clone()
+        };
+
+        let dependencies = dependencies
+            .into_iter()
+            .filter(|d| d.name != package_name && d.version != package_version)
+            .collect();
+
+        Ok(vec![vouch_lib::extension::PackageDependencies {
+            package_version: package_version,
+            registry_host_name: npm::get_registry_host_name(),
+            dependencies: dependencies,
+        }])
+    }
+
     fn identify_file_defined_dependencies(
         &self,
         working_directory: &std::path::PathBuf,
