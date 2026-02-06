@@ -8,7 +8,6 @@ mod npm;
 pub struct JsExtension {
     name_: String,
     registry_host_names_: Vec<String>,
-    root_url_: url::Url,
     registry_human_url_template_: String,
 }
 
@@ -17,7 +16,6 @@ impl vouch_lib::extension::FromLib for JsExtension {
         Self {
             name_: "js".to_string(),
             registry_host_names_: vec!["npmjs.com".to_owned()],
-            root_url_: url::Url::parse("https://www.npmjs.com").unwrap(),
             registry_human_url_template_:
                 "https://www.npmjs.com/package/{{package_name}}/v/{{package_version}}".to_string(),
         }
